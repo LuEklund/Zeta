@@ -1,0 +1,12 @@
+.{
+    .name = .SumoDashClient,
+    .version = "0.0.0",
+    .fingerprint = 0x6f3e510222877eef,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
