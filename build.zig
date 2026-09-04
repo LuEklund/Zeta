@@ -4,20 +4,33 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{ .default_target = .{ .abi = .gnu } });
     const optimize = b.standardOptimizeOption(.{});
 
-    const window_mod = windowModule(b, target, optimize);
+    const zeta_mod = zetaModule(b, target, optimize);
+
+    const server_system_mod = b.createModule(.{
+        .root_source_file = b.path("src/server/System.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "zeta", .module = zeta_mod }},
+    });
+    const server_system = b.addLibrary(.{
+        .name = "system_server",
+        .root_module = server_system_mod,
+        .linkage = .dynamic,
+    });
+    b.installArtifact(server_system);
 
     const server_mod = b.createModule(.{
         .root_source_file = b.path("src/server/main.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{ .name = "window", .module = window_mod }},
+        .imports = &.{.{ .name = "zeta", .module = zeta_mod }},
     });
 
     const client_mod = b.createModule(.{
         .root_source_file = b.path("src/client/main.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{ .name = "window", .module = window_mod }},
+        .imports = &.{.{ .name = "zeta", .module = zeta_mod }},
     });
 
     const server = b.addExecutable(.{ .name = "ZetaServer", .root_module = server_mod });
@@ -41,13 +54,13 @@ pub fn build(b: *std.Build) void {
     check.dependOn(&b.addExecutable(.{ .name = "check-client", .root_module = client_mod }).step);
 }
 
-fn windowModule(
+fn zetaModule(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) *std.Build.Module {
     const mod = b.createModule(.{
-        .root_source_file = b.path("src/Window.zig"),
+        .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
