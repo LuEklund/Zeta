@@ -3,19 +3,37 @@ const System = @This();
 const std = @import("std");
 const Window = @import("zeta").Window;
 
-fn init(self: *System, init_info: InitInfo) !void {
-    _ = self;
-    _ = init_info;
+io: std.Io,
+socket: std.Io.net.Socket,
+
+fn init(self: *System, data: InitInfo) !void {
+    const bind_address: std.Io.net.IpAddress = .{ .ip4 = .unspecified(9000) };
+    self.socket = try bind_address.bind(data.io, .{ .mode = .dgram });
+    self.io = data.io;
+
     std.log.debug("Server Init", .{});
 }
 fn update(self: *System, window: *Window) !void {
-    _ = self;
     _ = window;
+    var messages: [16]std.Io.net.IncomingMessage = @splat(.init);
+    var buffer: [1200]u8 = undefined;
+    const maybe_err, const count = self.socket.receiveManyTimeout(
+        self.io,
+        &messages,
+        &buffer,
+        .{},
+        .{ .duration = .{ .raw = .zero, .clock = .real } },
+    );
+    if (maybe_err) |err| if (err != error.Timeout) return err;
+    for (messages[0..count]) |message| {
+        std.log.debug("{f} sent {d} bytes: {s}", .{ message.from, message.data.len, message.data });
+    }
+
     std.log.debug("Server update", .{});
 }
 fn deinit(self: *System) !void {
     std.log.debug("Server Deinit", .{});
-    _ = self;
+    self.socket.close(self.io);
 }
 
 //Hot reload stuff
