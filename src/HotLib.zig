@@ -64,6 +64,7 @@ pub fn HotLib(comptime ffi: type) type {
             try cwd.copyFile(self.source_path, cwd, copy_path, io, .{});
             var dynlib = try DynLib.open(copy_path);
             errdefer dynlib.close();
+            cwd.deleteFile(io, copy_path) catch {};
 
             var api: Api = undefined;
             inline for (std.meta.fields(Api)) |field| {

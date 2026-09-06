@@ -65,6 +65,9 @@ fn zetaModule(
         .optimize = optimize,
         .imports = &.{
             .{ .name = "win32", .module = b.dependency("win32", .{}).module("win32") },
+            .{ .name = "vulkan", .module = b.dependency("vulkan", .{
+                .registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml"),
+            }).module("vulkan-zig") },
         },
         .link_libc = switch (target.result.os.tag) {
             .linux, .freebsd, .openbsd, .netbsd, .dragonfly, .illumos => true,
