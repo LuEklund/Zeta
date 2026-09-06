@@ -74,6 +74,13 @@ fn zetaModule(
             else => false,
         },
     });
+    const options = b.addOptions();
+    options.addOption(bool, "validation", b.option(
+        bool,
+        "validation",
+        "Enable Vulkan validation layers",
+    ) orelse true);
+    mod.addOptions("build_options", options);
 
     switch (target.result.os.tag) {
         .linux, .freebsd, .openbsd, .netbsd, .dragonfly, .illumos => {

@@ -21,7 +21,7 @@ pub fn main(init: std.process.Init) !void {
     defer hot_lib.deinit();
 
     var system: System = undefined;
-    if (!hot_lib.api.systemInit(&system, &.{ .io = io })) return error.SystemInit;
+    if (!hot_lib.api.systemInit(&system, &.{ .io = io, .gpa = arena, .window = &window })) return error.SystemInit;
     defer hot_lib.api.systemDeinit(&system);
 
     while (!window.should_close) {

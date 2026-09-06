@@ -1,20 +1,27 @@
 const System = @This();
 
 const std = @import("std");
-const Window = @import("zeta").Window;
+const zeta = @import("zeta");
+const Window = zeta.Window;
+const Renderer = zeta.Renderer;
 
 io: std.Io,
 socket: std.Io.net.Socket,
+renderer: Renderer,
 
 fn init(self: *System, data: InitInfo) !void {
     const bind_address: std.Io.net.IpAddress = .{ .ip4 = .unspecified(9000) };
     self.socket = try bind_address.bind(data.io, .{ .mode = .dgram });
     self.io = data.io;
 
+    try self.renderer.init(data.gpa, data.window);
+
     std.log.debug("Server Init", .{});
 }
+
 fn update(self: *System, window: *Window) !void {
-    _ = window;
+    // _ = window;
+    window.should_close = true;
     var messages: [16]std.Io.net.IncomingMessage = @splat(.init);
     var buffer: [1200]u8 = undefined;
     const maybe_err, const count = self.socket.receiveManyTimeout(
@@ -31,9 +38,11 @@ fn update(self: *System, window: *Window) !void {
 
     std.log.debug("Server update", .{});
 }
+
 fn deinit(self: *System) !void {
     std.log.debug("Server Deinit", .{});
     self.socket.close(self.io);
+    self.renderer.deinit();
 }
 
 //Hot reload stuff
@@ -43,6 +52,9 @@ comptime {
 
 pub const InitInfo = struct {
     io: std.Io,
+    gpa: std.mem.Allocator,
+
+    window: *Window,
 };
 
 pub const ffi = struct {
