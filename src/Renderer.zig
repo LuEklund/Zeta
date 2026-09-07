@@ -8,6 +8,7 @@ const Window = @import("Window.zig");
 
 const Instance = @import("Renderer/Instance.zig");
 const Device = @import("Renderer/Device.zig");
+const Swapchain = @import("Renderer/Swapchain.zig");
 
 const libvulkan = switch (builtin.os.tag) {
     .windows => "vulkan-1.dll",
