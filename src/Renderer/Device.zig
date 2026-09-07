@@ -42,7 +42,13 @@ pub fn init(
         queue_info_count = 2;
     }
 
+    var features13: vk.PhysicalDeviceVulkan13Features = .{
+        .dynamic_rendering = .true,
+        .synchronization_2 = .true,
+    };
+
     const handle = try vki.createDevice(selection.physical, &.{
+        .p_next = &features13,
         .queue_create_info_count = queue_info_count,
         .p_queue_create_infos = &queue_infos,
         .enabled_extension_count = @intCast(device_extensions.len),

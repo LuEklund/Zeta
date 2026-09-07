@@ -14,6 +14,7 @@ format: vk.Format,
 extent: vk.Extent2D,
 images: [max_images]vk.Image,
 views: [max_images]vk.ImageView,
+render_finished: [max_images]vk.Semaphore,
 image_count: u32,
 
 pub fn init(
@@ -23,7 +24,7 @@ pub fn init(
     surface: vk.SurfaceKHR,
     wanted_extent: vk.Extent2D,
     old_handle: vk.SwapchainKHR,
-) void {
+) !void {
     const vki = instance.proxy;
     const vkd = device.proxy;
 
@@ -73,6 +74,7 @@ pub fn init(
     errdefer for (self.views[0..created]) |view|
         vkd.destroyImageView(view, null);
     while (created < count) : (created += 1) {
+        self.render_finished[created] = try vkd.createSemaphore(&.{}, null);
         self.views[created] = try vkd.createImageView(&.{
             .image = self.images[created],
             .view_type = .@"2d",
@@ -92,6 +94,7 @@ pub fn init(
 pub fn deinit(self: *Swapchain, device: *const Device) void {
     const vkd = device.proxy;
     for (self.views[0..self.image_count]) |view| vkd.destroyImageView(view, null);
+    for (self.render_finished[0..self.image_count]) |semaphore| vkd.destroySemaphore(semaphore, null);
     vkd.destroySwapchainKHR(self.handle, null);
 }
 
