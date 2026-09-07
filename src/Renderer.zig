@@ -45,6 +45,7 @@ surface: vk.SurfaceKHR,
 command_pool: vk.CommandPool,
 frame_data: [frame_data_count]FrameData,
 frame_data_index: u32,
+swapchain_dirty: bool,
 
 pub fn init(self: *Renderer, gpa: std.mem.Allocator, window: *Window) !void {
     self.dynlib = try .open(libvulkan);
@@ -83,12 +84,15 @@ pub fn init(self: *Renderer, gpa: std.mem.Allocator, window: *Window) !void {
         .width = window.size.width,
         .height = window.size.height,
     }, .null_handle);
+    std.debug.assert(frame_data_count <= self.swapchain.image_count);
+
     self.command_pool = try self.device.proxy.createCommandPool(&.{
         .flags = .{ .reset_command_buffer_bit = true },
         .queue_family_index = self.device.graphics_family,
     }, null);
     for (&self.frame_data) |*frame| try frame.init(&self.device, self.command_pool);
     self.frame_data_index = 0;
+    self.swapchain_dirty = false;
 }
 
 pub fn deinit(self: *Renderer) void {
@@ -102,6 +106,18 @@ pub fn deinit(self: *Renderer) void {
 
 pub fn draw(self: *Renderer, window: *Window) !void {
     const vkd = self.device.proxy;
+
+    if (self.swapchain_dirty or window.size.width != self.swapchain.extent.width or
+        window.size.height != self.swapchain.extent.height)
+    {
+        try self.swapchain.recreate(&self.instance, &self.device, self.surface, .{
+            .width = window.size.width,
+            .height = window.size.height,
+        });
+        self.swapchain_dirty = false;
+    }
+    if (self.swapchain.extent.width == 0 or self.swapchain.extent.height == 0) return;
+
     const frame = &self.frame_data[self.frame_data_index];
 
     _ = try vkd.waitForFences(@ptrCast(&frame.in_flight), .true, std.math.maxInt(u64));
@@ -112,17 +128,13 @@ pub fn draw(self: *Renderer, window: *Window) !void {
         frame.image_available,
         .null_handle,
     ) catch |err| switch (err) {
-        error.OutOfDateKHR => return self.swapchain.recreate(
-            &self.instance,
-            &self.device,
-            self.surface,
-            .{
-                .width = window.size.width,
-                .height = window.size.height,
-            },
-        ),
+        error.OutOfDateKHR => {
+            self.swapchain_dirty = true;
+            return;
+        },
         else => return err,
     };
+    if (acquired.result == .suboptimal_khr) self.swapchain_dirty = true;
     const image_index = acquired.image_index;
 
     try vkd.resetFences(@ptrCast(&frame.in_flight));
@@ -140,19 +152,18 @@ pub fn draw(self: *Renderer, window: *Window) !void {
         .signal_semaphore_count = 1,
         .p_signal_semaphores = @ptrCast(&self.swapchain.render_finished[image_index]),
     }}, frame.in_flight);
-    _ = vkd.queuePresentKHR(self.device.present_queue, &.{
+    if (vkd.queuePresentKHR(self.device.present_queue, &.{
         .wait_semaphore_count = 1,
         .p_wait_semaphores = @ptrCast(&self.swapchain.render_finished[image_index]),
         .swapchain_count = 1,
         .p_swapchains = @ptrCast(&self.swapchain.handle),
         .p_image_indices = @ptrCast(&image_index),
-    }) catch |err| switch (err) {
-        error.OutOfDateKHR => try self.swapchain.recreate(&self.instance, &self.device, self.surface, .{
-            .width = window.size.width,
-            .height = window.size.height,
-        }),
+    })) |result| {
+        if (result == .suboptimal_khr) self.swapchain_dirty = true;
+    } else |err| switch (err) {
+        error.OutOfDateKHR => self.swapchain_dirty = true,
         else => return err,
-    };
+    }
 
     self.frame_data_index = (self.frame_data_index + 1) % frame_data_count;
 }
