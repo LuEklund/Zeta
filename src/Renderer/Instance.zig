@@ -11,15 +11,15 @@ pub const default_debug_info: vk.DebugUtilsMessengerCreateInfoEXT = .{
 
 pub const api_version = vk.makeApiVersion(0, 1, 3, 0);
 
-handle: vk.Instance,
 dispatch: vk.InstanceWrapper,
+proxy: vk.InstanceProxy,
 debug_messenger: vk.DebugUtilsMessengerEXT,
 
 pub fn init(
     self: *Instance,
     vkb: vk.BaseWrapper,
     layers: []const [*:0]const u8,
-    extensions: []const [*:0]const u8,
+    instance_extensions: []const [*:0]const u8,
     debug: ?*const vk.DebugUtilsMessengerCreateInfoEXT,
 ) !void {
     const available_api_version: vk.Version = @bitCast(try vkb.enumerateInstanceVersion());
@@ -30,7 +30,7 @@ pub fn init(
         return error.VulkanVersionTooOld;
     }
 
-    self.handle = try vkb.createInstance(&.{
+    const handle = try vkb.createInstance(&.{
         .p_next = debug,
         .p_application_info = &.{
             .p_engine_name = "zeta",
@@ -40,21 +40,23 @@ pub fn init(
         },
         .enabled_layer_count = @intCast(layers.len),
         .pp_enabled_layer_names = layers.ptr,
-        .enabled_extension_count = @intCast(extensions.len),
-        .pp_enabled_extension_names = extensions.ptr,
+        .enabled_extension_count = @intCast(instance_extensions.len),
+        .pp_enabled_extension_names = instance_extensions.ptr,
     }, null);
-    self.dispatch = .load(self.handle, vkb.dispatch.vkGetInstanceProcAddr.?);
+    self.dispatch = .load(handle, vkb.dispatch.vkGetInstanceProcAddr.?);
+    self.proxy = .init(handle, &self.dispatch);
+    const vki = self.proxy;
 
-    self.debug_messenger = if (debug) |info| try self.dispatch.createDebugUtilsMessengerEXT(
-        self.handle,
-        info,
-        null,
-    ) else .null_handle;
+    self.debug_messenger = if (debug) |info|
+        try vki.createDebugUtilsMessengerEXT(info, null)
+    else
+        .null_handle;
 }
 
 pub fn deinit(self: *Instance) void {
-    if (self.debug_messenger != .null_handle) self.dispatch.destroyDebugUtilsMessengerEXT(self.handle, self.debug_messenger, null);
-    self.dispatch.destroyInstance(self.handle, null);
+    const vki = self.proxy;
+    if (self.debug_messenger != .null_handle) vki.destroyDebugUtilsMessengerEXT(self.debug_messenger, null);
+    vki.destroyInstance(null);
 }
 
 fn debugCallback(
