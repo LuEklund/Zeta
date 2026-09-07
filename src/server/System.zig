@@ -20,8 +20,8 @@ fn init(self: *System, data: InitInfo) !void {
 }
 
 fn update(self: *System, window: *Window) !void {
-    try self.renderer.draw(window);
     // window.should_close = true;
+    try self.renderer.draw(window);
     var messages: [16]std.Io.net.IncomingMessage = @splat(.init);
     var buffer: [1200]u8 = undefined;
     const maybe_err, const count = self.socket.receiveManyTimeout(
@@ -35,8 +35,6 @@ fn update(self: *System, window: *Window) !void {
     for (messages[0..count]) |message| {
         std.log.debug("{f} sent {d} bytes: {s}", .{ message.from, message.data.len, message.data });
     }
-
-    std.log.debug("Server update", .{});
 }
 
 fn deinit(self: *System) !void {

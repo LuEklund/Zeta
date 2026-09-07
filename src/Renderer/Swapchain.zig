@@ -93,8 +93,13 @@ pub fn init(
 
 pub fn deinit(self: *Swapchain, device: *const Device) void {
     const vkd = device.proxy;
-    for (self.views[0..self.image_count]) |view| vkd.destroyImageView(view, null);
-    for (self.render_finished[0..self.image_count]) |semaphore| vkd.destroySemaphore(semaphore, null);
+    for (
+        self.views[0..self.image_count],
+        self.render_finished[0..self.image_count],
+    ) |view, semaphore| {
+        vkd.destroyImageView(view, null);
+        vkd.destroySemaphore(semaphore, null);
+    }
     vkd.destroySwapchainKHR(self.handle, null);
 }
 
@@ -105,7 +110,8 @@ pub fn recreate(
     surface: vk.SurfaceKHR,
     wanted_extent: vk.Extent2D,
 ) !void {
-    device.proxy.deviceWaitIdle() catch {};
+    const vkd = device.proxy;
+    vkd.deviceWaitIdle() catch {};
 
     var old = self.*;
     try self.init(instance, device, surface, wanted_extent, old.handle);

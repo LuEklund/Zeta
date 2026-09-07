@@ -82,6 +82,13 @@ fn zetaModule(
     ) orelse true);
     mod.addOptions("build_options", options);
 
+    const slangc = b.addSystemCommand(&.{"slangc"});
+    slangc.addFileArg(b.path("src/shaders/triangle.slang"));
+    slangc.addArgs(&.{ "-target", "spirv" });
+    slangc.addArg("-o");
+    const triangle_spv = slangc.addOutputFileArg("triangle.spv");
+    mod.addAnonymousImport("triangle_spv", .{ .root_source_file = triangle_spv });
+
     switch (target.result.os.tag) {
         .linux, .freebsd, .openbsd, .netbsd, .dragonfly, .illumos => {
             const scanner = @import("wayland").Scanner.create(b, .{});

@@ -11,6 +11,7 @@ const Device = @import("Renderer/Device.zig");
 const Swapchain = @import("Renderer/Swapchain.zig");
 const FrameData = @import("Renderer/FrameData.zig");
 const Barrier = @import("Renderer/Barrier.zig");
+const Pipeline = @import("Renderer/Pipeline.zig");
 
 const libvulkan = switch (builtin.os.tag) {
     .windows => "vulkan-1.dll",
@@ -46,6 +47,7 @@ command_pool: vk.CommandPool,
 frame_data: [frame_data_count]FrameData,
 frame_data_index: u32,
 swapchain_dirty: bool,
+pipeline: Pipeline,
 
 pub fn init(self: *Renderer, gpa: std.mem.Allocator, window: *Window) !void {
     self.dynlib = try .open(libvulkan);
@@ -86,20 +88,30 @@ pub fn init(self: *Renderer, gpa: std.mem.Allocator, window: *Window) !void {
     }, .null_handle);
     std.debug.assert(frame_data_count <= self.swapchain.image_count);
 
-    self.command_pool = try self.device.proxy.createCommandPool(&.{
+    const vkd = self.device.proxy;
+    self.command_pool = try vkd.createCommandPool(&.{
         .flags = .{ .reset_command_buffer_bit = true },
         .queue_family_index = self.device.graphics_family,
     }, null);
     for (&self.frame_data) |*frame| try frame.init(&self.device, self.command_pool);
     self.frame_data_index = 0;
     self.swapchain_dirty = false;
+
+    try self.pipeline.init(&self.device, .{ .color_format = self.swapchain.format });
 }
 
 pub fn deinit(self: *Renderer) void {
+    const vkd = self.device.proxy;
+    const vki = self.instance.proxy;
+
+    vkd.deviceWaitIdle() catch {};
+
+    self.pipeline.deinit(&self.device);
     for (&self.frame_data) |*frame| frame.deinit(&self.device);
-    self.device.proxy.destroyCommandPool(self.command_pool, null);
+    vkd.destroyCommandPool(self.command_pool, null);
+    self.swapchain.deinit(&self.device);
     self.device.deinit();
-    self.instance.proxy.destroySurfaceKHR(self.surface, null);
+    vki.destroySurfaceKHR(self.surface, null);
     self.instance.deinit();
     self.dynlib.close();
 }
@@ -203,7 +215,20 @@ fn record(self: *Renderer, cmd: vk.CommandBuffer, image_index: u32) !void {
         .p_color_attachments = @ptrCast(&color),
     });
 
-    // we do the draw here
+    vkd.cmdBindPipeline(cmd, .graphics, self.pipeline.handle);
+    vkd.cmdSetViewport(cmd, 0, &.{.{
+        .x = 0,
+        .y = 0,
+        .width = @floatFromInt(self.swapchain.extent.width),
+        .height = @floatFromInt(self.swapchain.extent.height),
+        .min_depth = 0,
+        .max_depth = 1,
+    }});
+    vkd.cmdSetScissor(cmd, 0, &.{.{
+        .offset = .{ .x = 0, .y = 0 },
+        .extent = self.swapchain.extent,
+    }});
+    vkd.cmdDraw(cmd, 3, 1, 0, 0);
 
     vkd.cmdEndRendering(cmd);
 
@@ -213,13 +238,15 @@ fn record(self: *Renderer, cmd: vk.CommandBuffer, image_index: u32) !void {
 }
 
 fn createSurface(instance: *const Instance, window: *Window) !vk.SurfaceKHR {
+    const vki = instance.proxy;
+
     return switch (builtin.os.tag) {
         .linux, .freebsd, .openbsd, .netbsd, .dragonfly, .illumos => switch (window.inner) {
-            .wayland => |*w| instance.proxy.createWaylandSurfaceKHR(&.{
+            .wayland => |*w| vki.createWaylandSurfaceKHR(&.{
                 .display = @ptrCast(w.display),
                 .surface = @ptrCast(w.surface),
             }, null),
-            .x11 => |*w| instance.proxy.createXlibSurfaceKHR(&.{
+            .x11 => |*w| vki.createXlibSurfaceKHR(&.{
                 .dpy = @ptrCast(w.display),
                 .window = @bitCast(w.xid),
             }, null),

@@ -42,7 +42,11 @@ pub fn init(
         queue_info_count = 2;
     }
 
+    var features11: vk.PhysicalDeviceVulkan11Features = .{
+        .shader_draw_parameters = .true,
+    };
     var features13: vk.PhysicalDeviceVulkan13Features = .{
+        .p_next = &features11,
         .dynamic_rendering = .true,
         .synchronization_2 = .true,
     };
@@ -69,7 +73,6 @@ pub fn init(
 
 pub fn deinit(self: *Device) void {
     const vkd = self.proxy;
-    vkd.deviceWaitIdle() catch {};
     vkd.destroyDevice(null);
 }
 
