@@ -79,7 +79,7 @@ pub fn poll(self: *Cocoa, window: *Window, options: Window.PollOptions) !void {
                 6 => b.extra2 = state,
                 7 => b.extra3 = state,
                 else => {
-                    std.log.err("bad mouse button: {d}", .{event.data.mouse_button.button});
+                    std.log.info("bad mouse button: {d}", .{event.data.mouse_button.button});
                 },
             }
         },
@@ -90,7 +90,7 @@ pub fn poll(self: *Cocoa, window: *Window, options: Window.PollOptions) !void {
 
         .key_down, .key_up => {
             const key = Window.Keyboard.fromCocoa(event.data.key.key_code) orelse {
-                std.log.err("unknown keycode: {d}", .{event.data.key.key_code});
+                std.log.info("unknown keycode: {d}", .{event.data.key.key_code});
                 continue;
             };
 

@@ -6,10 +6,12 @@ const System = @import("System.zig");
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
-    const arena = init.arena.allocator();
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    defer if (debug_allocator.deinit() == .leak) std.log.err("memory leaked", .{});
+    const gpa = debug_allocator.allocator();
 
     var window: Window = undefined;
-    try window.open(arena, init.minimal, .{
+    try window.open(gpa, init.minimal, .{
         .title = "Zeta Server",
         .app_id = "zeta-server",
         .size = .{ .width = 1280, .height = 720 },
@@ -21,7 +23,7 @@ pub fn main(init: std.process.Init) !void {
     defer hot_lib.deinit();
 
     var system: System = undefined;
-    if (!hot_lib.api.systemInit(&system, &.{ .io = io, .gpa = arena, .window = &window })) return error.SystemInit;
+    if (!hot_lib.api.systemInit(&system, &.{ .io = io, .gpa = gpa, .window = &window })) return error.SystemInit;
     defer hot_lib.api.systemDeinit(&system);
 
     while (!window.should_close) {

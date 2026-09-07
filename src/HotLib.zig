@@ -45,7 +45,7 @@ pub fn HotLib(comptime ffi: type) type {
             if (stat.mtime.nanoseconds <= self.mtime.nanoseconds) return;
 
             self.open(io) catch |err| {
-                std.log.err("{s}: reload failed: {t}", .{ self.source_path, err });
+                std.log.info("{s}: reload failed: {t}", .{ self.source_path, err });
                 return;
             };
 
