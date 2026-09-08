@@ -9,8 +9,11 @@ const max_physical_devices = 8;
 const max_queue_families = 16;
 
 physical: vk.PhysicalDevice,
+memory_properties: vk.PhysicalDeviceMemoryProperties,
+
 dispatch: vk.DeviceWrapper,
 proxy: vk.DeviceProxy,
+
 graphics_queue: vk.Queue,
 present_queue: vk.Queue,
 graphics_family: u32,
@@ -45,8 +48,12 @@ pub fn init(
     var features11: vk.PhysicalDeviceVulkan11Features = .{
         .shader_draw_parameters = .true,
     };
-    var features13: vk.PhysicalDeviceVulkan13Features = .{
+    var features12: vk.PhysicalDeviceVulkan12Features = .{
         .p_next = &features11,
+        .buffer_device_address = .true,
+    };
+    var features13: vk.PhysicalDeviceVulkan13Features = .{
+        .p_next = &features12,
         .dynamic_rendering = .true,
         .synchronization_2 = .true,
     };
@@ -65,6 +72,7 @@ pub fn init(
     errdefer vkd.destroyDevice(null);
 
     self.physical = selection.physical;
+    self.memory_properties = vki.getPhysicalDeviceMemoryProperties(selection.physical);
     self.graphics_family = selection.graphics_family;
     self.present_family = selection.present_family;
     self.graphics_queue = vkd.getDeviceQueue(selection.graphics_family, 0);
@@ -166,4 +174,16 @@ fn findFamilies(instance: *const Instance, physical: vk.PhysicalDevice, surface:
         .graphics = graphics orelse return null,
         .present = present orelse return null,
     };
+}
+
+pub fn findMemoryTypeIndex(
+    props: vk.PhysicalDeviceMemoryProperties,
+    type_bits: u32,
+    required: vk.MemoryPropertyFlags,
+) u32 {
+    for (props.memory_types[0..props.memory_type_count], 0..) |mem_type, i| {
+        if (type_bits & (@as(u32, 1) << @intCast(i)) == 0) continue;
+        if (mem_type.property_flags.contains(required)) return @intCast(i);
+    }
+    @panic("no matching memory types");
 }

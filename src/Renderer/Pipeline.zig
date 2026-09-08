@@ -15,6 +15,7 @@ pub const Config = struct {
     line_width: f32 = 1,
     blend_enable: bool = false,
     depth_format: vk.Format = .undefined,
+    push_constant_size: u32 = 0,
 };
 
 handle: vk.Pipeline,
@@ -29,7 +30,16 @@ pub fn init(self: *Pipeline, device: *const Device, config: Config) !void {
     }, null);
     defer vkd.destroyShaderModule(module, null);
 
-    self.layout = try vkd.createPipelineLayout(&.{}, null);
+    const push_range: vk.PushConstantRange = .{
+        .offset = 0,
+        .stage_flags = .{ .vertex_bit = true },
+        .size = config.push_constant_size,
+    };
+
+    self.layout = try vkd.createPipelineLayout(&.{
+        .push_constant_range_count = if (config.push_constant_size > 0) 1 else 0,
+        .p_push_constant_ranges = @ptrCast(&push_range),
+    }, null);
     errdefer vkd.destroyPipelineLayout(self.layout, null);
 
     const stages: [2]vk.PipelineShaderStageCreateInfo = .{

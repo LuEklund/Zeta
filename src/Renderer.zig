@@ -12,6 +12,7 @@ const Swapchain = @import("Renderer/Swapchain.zig");
 const FrameData = @import("Renderer/FrameData.zig");
 const Barrier = @import("Renderer/Barrier.zig");
 const Pipeline = @import("Renderer/Pipeline.zig");
+const Buffer = @import("Renderer/Buffer.zig");
 
 const libvulkan = switch (builtin.os.tag) {
     .windows => "vulkan-1.dll",
@@ -48,6 +49,23 @@ frame_data: [frame_data_count]FrameData,
 frame_data_index: u32,
 swapchain_dirty: bool,
 pipeline: Pipeline,
+
+buffer: Buffer,
+triangle: Buffer.Allocation,
+const buffer_size = 8 * 1024 * 1024;
+
+pub const Vertex = extern struct {
+    pos: [4]f32,
+    color: [4]f32,
+};
+const triangle_vertices: [3]Vertex = .{
+    .{ .pos = .{ 0.0, -0.5, 0, 1 }, .color = .{ 1, 0, 0, 1 } },
+    .{ .pos = .{ 0.5, 0.5, 0, 1 }, .color = .{ 0, 1, 0, 1 } },
+    .{ .pos = .{ -0.5, 0.5, 0, 1 }, .color = .{ 0, 0, 1, 1 } },
+};
+pub const PushConstant = extern struct {
+    vertices: vk.DeviceAddress,
+};
 
 pub fn init(self: *Renderer, gpa: std.mem.Allocator, window: *Window) !void {
     self.dynlib = try .open(libvulkan);
@@ -97,7 +115,17 @@ pub fn init(self: *Renderer, gpa: std.mem.Allocator, window: *Window) !void {
     self.frame_data_index = 0;
     self.swapchain_dirty = false;
 
-    try self.pipeline.init(&self.device, .{ .color_format = self.swapchain.format });
+    try self.buffer.init(&self.device, buffer_size, .{
+        .vertex_buffer_bit = true,
+        .index_buffer_bit = true,
+        .shader_device_address_bit = true,
+    });
+    self.triangle = self.buffer.alloc(Vertex, &triangle_vertices, 16);
+
+    try self.pipeline.init(&self.device, .{
+        .color_format = self.swapchain.format,
+        .push_constant_size = @sizeOf(vk.DeviceAddress),
+    });
 }
 
 pub fn deinit(self: *Renderer) void {
@@ -106,6 +134,7 @@ pub fn deinit(self: *Renderer) void {
 
     vkd.deviceWaitIdle() catch {};
 
+    self.buffer.deinit(&self.device);
     self.pipeline.deinit(&self.device);
     for (&self.frame_data) |*frame| frame.deinit(&self.device);
     vkd.destroyCommandPool(self.command_pool, null);
@@ -228,6 +257,15 @@ fn record(self: *Renderer, cmd: vk.CommandBuffer, image_index: u32) !void {
         .offset = .{ .x = 0, .y = 0 },
         .extent = self.swapchain.extent,
     }});
+    const push: PushConstant = .{ .vertices = self.triangle.address };
+    vkd.cmdPushConstants(
+        cmd,
+        self.pipeline.layout,
+        .{ .vertex_bit = true },
+        0,
+        @sizeOf(PushConstant),
+        &push,
+    );
     vkd.cmdDraw(cmd, 3, 1, 0, 0);
 
     vkd.cmdEndRendering(cmd);
