@@ -276,7 +276,14 @@ fn record(self: *Renderer, cmd: vk.CommandBuffer, image_index: u32) !void {
         &push,
     );
     vkd.cmdBindIndexBuffer(cmd, self.buffer.handle, self.sphere_indices.offset, .uint32);
-    vkd.cmdDraw(cmd, Mesh.sphere.indices.len, 1, 0, 0);
+    vkd.cmdDrawIndexed(
+        cmd,
+        Mesh.sphere.indices.len,
+        1,
+        0,
+        0,
+        0,
+    );
 
     vkd.cmdEndRendering(cmd);
 

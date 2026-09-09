@@ -62,6 +62,7 @@ pub fn HotLib(comptime ffi: type) type {
             });
             const cwd = std.Io.Dir.cwd();
             try cwd.copyFile(self.source_path, cwd, copy_path, io, .{});
+            // std.log.debug("opening {s}", .{copy_path});
             var dynlib = try DynLib.open(copy_path);
             errdefer dynlib.close();
             cwd.deleteFile(io, copy_path) catch {};

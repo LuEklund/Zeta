@@ -16,6 +16,7 @@ pub fn main(init: std.process.Init) !void {
         .app_id = "zeta-server",
         .size = .{ .width = 1280, .height = 720 },
     });
+    try window.setPointerRelative(true);
     defer window.close();
 
     var hot_lib: HotLib(System.ffi) = undefined;
