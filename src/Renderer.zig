@@ -4,6 +4,7 @@ const build_options = @import("build_options");
 const builtin = @import("builtin");
 const std = @import("std");
 const vk = @import("vulkan");
+const nz = @import("numz");
 const Window = @import("Window.zig");
 
 const Instance = @import("Renderer/Instance.zig");
@@ -13,6 +14,8 @@ const FrameData = @import("Renderer/FrameData.zig");
 const Barrier = @import("Renderer/Barrier.zig");
 const Pipeline = @import("Renderer/Pipeline.zig");
 const Buffer = @import("Renderer/Buffer.zig");
+
+const Mesh = @import("Mesh.zig");
 
 const libvulkan = switch (builtin.os.tag) {
     .windows => "vulkan-1.dll",
@@ -51,19 +54,12 @@ swapchain_dirty: bool,
 pipeline: Pipeline,
 
 buffer: Buffer,
-triangle: Buffer.Allocation,
+sphere_vertices: Buffer.Allocation,
+sphere_indices: Buffer.Allocation,
 const buffer_size = 8 * 1024 * 1024;
 
-pub const Vertex = extern struct {
-    pos: [4]f32,
-    color: [4]f32,
-};
-const triangle_vertices: [3]Vertex = .{
-    .{ .pos = .{ 0.0, -0.5, 0, 1 }, .color = .{ 1, 0, 0, 1 } },
-    .{ .pos = .{ 0.5, 0.5, 0, 1 }, .color = .{ 0, 1, 0, 1 } },
-    .{ .pos = .{ -0.5, 0.5, 0, 1 }, .color = .{ 0, 0, 1, 1 } },
-};
 pub const PushConstant = extern struct {
+    mvp: [16]f32,
     vertices: vk.DeviceAddress,
 };
 
@@ -120,11 +116,12 @@ pub fn init(self: *Renderer, gpa: std.mem.Allocator, window: *Window) !void {
         .index_buffer_bit = true,
         .shader_device_address_bit = true,
     });
-    self.triangle = self.buffer.alloc(Vertex, &triangle_vertices, 16);
+    self.sphere_vertices = self.buffer.alloc(Mesh.Vertex, Mesh.sphere.vertices, 16);
+    self.sphere_indices = self.buffer.alloc(u32, Mesh.sphere.indices, 4);
 
     try self.pipeline.init(&self.device, .{
         .color_format = self.swapchain.format,
-        .push_constant_size = @sizeOf(vk.DeviceAddress),
+        .push_constant_size = @sizeOf(PushConstant),
     });
 }
 
@@ -145,6 +142,9 @@ pub fn deinit(self: *Renderer) void {
     self.dynlib.close();
 }
 
+// pub const DrawData = struct {
+//     elapsed
+// };
 pub fn draw(self: *Renderer, window: *Window) !void {
     const vkd = self.device.proxy;
 
@@ -257,7 +257,16 @@ fn record(self: *Renderer, cmd: vk.CommandBuffer, image_index: u32) !void {
         .offset = .{ .x = 0, .y = 0 },
         .extent = self.swapchain.extent,
     }});
-    const push: PushConstant = .{ .vertices = self.triangle.address };
+
+    const view: nz.Mat4x4(f32) = .lookAt(.{ 0, 0, 4 }, .{ 0, 0, 0 }, .{ 0, 1, 0 });
+    const aspect = self.swapchain.getAspect();
+    const projection: nz.Mat4x4(f32) =
+        .perspective(std.math.degreesToRadians(60.0), aspect, 0.1, 100);
+
+    const push: PushConstant = .{
+        .mvp = projection.mul(view).d,
+        .vertices = self.sphere_vertices.address,
+    };
     vkd.cmdPushConstants(
         cmd,
         self.pipeline.layout,
@@ -266,7 +275,8 @@ fn record(self: *Renderer, cmd: vk.CommandBuffer, image_index: u32) !void {
         @sizeOf(PushConstant),
         &push,
     );
-    vkd.cmdDraw(cmd, 3, 1, 0, 0);
+    vkd.cmdBindIndexBuffer(cmd, self.buffer.handle, self.sphere_indices.offset, .uint32);
+    vkd.cmdDraw(cmd, Mesh.sphere.indices.len, 1, 0, 0);
 
     vkd.cmdEndRendering(cmd);
 

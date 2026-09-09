@@ -1,6 +1,7 @@
 const Swapchain = @This();
 
 const std = @import("std");
+const nz = @import("numz");
 const vk = @import("vulkan");
 const Instance = @import("Instance.zig");
 const Device = @import("Device.zig");
@@ -116,6 +117,11 @@ pub fn recreate(
     var old = self.*;
     try self.init(instance, device, surface, wanted_extent, old.handle);
     old.deinit(device);
+}
+
+pub fn getAspect(self: *const Swapchain) f32 {
+    return @as(f32, @floatFromInt(self.extent.width)) /
+        @as(f32, @floatFromInt(self.extent.height));
 }
 
 fn pickExtent(caps: vk.SurfaceCapabilitiesKHR, wanted: vk.Extent2D) vk.Extent2D {

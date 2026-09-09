@@ -4,6 +4,7 @@ struct Vertex {
 };
 
 struct Push {
+  float4x4 mvp;
   Vertex *vertices;
 };
 
@@ -19,7 +20,7 @@ struct VSOut {
 VSOut vertexMain(uint id: SV_VertexID) {
   Vertex v = push.vertices[id];
   VSOut out;
-  out.pos = v.pos;
+  out.pos = mul(push.mvp, v.pos);
   out.color = v.color.rgb;
   return out;
 }

@@ -68,6 +68,10 @@ fn zetaModule(
             .{ .name = "vulkan", .module = b.dependency("vulkan", .{
                 .registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml"),
             }).module("vulkan-zig") },
+            .{ .name = "numz", .module = b.dependency("numz", .{
+                .target = target,
+                .optimize = optimize,
+            }).module("numz") },
         },
         .link_libc = switch (target.result.os.tag) {
             .linux, .freebsd, .openbsd, .netbsd, .dragonfly, .illumos => true,
