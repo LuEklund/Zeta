@@ -5,13 +5,59 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const zeta_mod = zetaModule(b, target, optimize);
+    const box3d_dep = b.dependency("box3d", .{});
+    const box3d_lib = b.addLibrary(.{
+        .name = "box3d",
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .sanitize_c = .off,
+        }),
+    });
+    box3d_lib.root_module.addIncludePath(box3d_dep.path("include"));
+    box3d_lib.root_module.addIncludePath(box3d_dep.path("src"));
+    box3d_lib.root_module.addCSourceFiles(.{
+        .root = box3d_dep.path("src"),
+        .flags = &.{"-std=gnu17"},
+        .files = &.{
+            "aabb.c",              "arena_allocator.c", "bitset.c",
+            "block_allocator.c",   "body.c",            "broad_phase.c",
+            "capsule.c",           "compound.c",        "constraint_graph.c",
+            "contact.c",           "contact_solver.c",  "convex_manifold.c",
+            "core.c",              "distance.c",        "distance_joint.c",
+            "dynamic_tree.c",      "height_field.c",    "hull.c",
+            "id_pool.c",           "island.c",          "joint.c",
+            "manifold.c",          "math_functions.c",  "mesh.c",
+            "mesh_contact.c",      "motor_joint.c",     "mover.c",
+            "name_cache.c",        "parallel_for.c",    "parallel_joint.c",
+            "physics_world.c",     "prismatic_joint.c", "recording.c",
+            "recording_replay.c",  "revolute_joint.c",  "scheduler.c",
+            "sensor.c",            "shape.c",           "simd.c",
+            "solver.c",            "solver_set.c",      "sphere.c",
+            "spherical_joint.c",   "table.c",           "timer.c",
+            "triangle_manifold.c", "types.c",           "weld_joint.c",
+            "wheel_joint.c",       "world_snapshot.c",
+        },
+    });
+    const box3d_tc = b.addTranslateC(.{
+        .root_source_file = box3d_dep.path("include/box3d/box3d.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    box3d_tc.addIncludePath(box3d_dep.path("include"));
+    const box3d_mod = box3d_tc.createModule();
 
     const server_system_mod = b.createModule(.{
         .root_source_file = b.path("src/server/System.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{ .name = "zeta", .module = zeta_mod }},
+        .imports = &.{
+            .{ .name = "zeta", .module = zeta_mod },
+            .{ .name = "box3d", .module = box3d_mod },
+        },
     });
+    server_system_mod.linkLibrary(box3d_lib);
     const server_system = b.addLibrary(.{
         .name = "system_server",
         .root_module = server_system_mod,
@@ -23,8 +69,12 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/server/main.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{ .name = "zeta", .module = zeta_mod }},
+        .imports = &.{
+            .{ .name = "zeta", .module = zeta_mod },
+            .{ .name = "box3d", .module = box3d_mod },
+        },
     });
+    server_mod.linkLibrary(box3d_lib);
 
     const client_mod = b.createModule(.{
         .root_source_file = b.path("src/client/main.zig"),

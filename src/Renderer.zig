@@ -152,6 +152,7 @@ pub const DrawData = struct {
     window_size: Window.Size,
     elapsed_time: f32,
     view_matrix: nz.Mat4x4(f32),
+    ball_transform: nz.Mat4x4(f32),
 };
 pub fn draw(self: *Renderer, draw_data: DrawData) !void {
     const window_size = draw_data.window_size;
@@ -293,9 +294,10 @@ fn record(self: *Renderer, cmd: vk.CommandBuffer, image_index: u32, draw_data: D
     var projection: nz.Mat4x4(f32) =
         .perspective(std.math.degreesToRadians(60.0), aspect, 0.1, 100);
     projection.d[5] = -projection.d[5];
+    const view_projection = projection.mul(draw_data.view_matrix);
 
     const push: PushConstant = .{
-        .mvp = projection.mul(draw_data.view_matrix).d,
+        .mvp = view_projection.mul(draw_data.ball_transform).d,
         .vertices = self.sphere_vertices.address,
     };
     vkd.cmdPushConstants(
