@@ -56,6 +56,8 @@ pipeline: Pipeline,
 buffer: Buffer,
 sphere_vertices: Buffer.Allocation,
 sphere_indices: Buffer.Allocation,
+ground_vertices: Buffer.Allocation,
+ground_indices: Buffer.Allocation,
 const buffer_size = 8 * 1024 * 1024;
 
 pub const PushConstant = extern struct {
@@ -116,12 +118,16 @@ pub fn init(self: *Renderer, gpa: std.mem.Allocator, window: *Window) !void {
         .index_buffer_bit = true,
         .shader_device_address_bit = true,
     });
+
     self.sphere_vertices = self.buffer.alloc(Mesh.Vertex, Mesh.sphere.vertices, 16);
     self.sphere_indices = self.buffer.alloc(u32, Mesh.sphere.indices, 4);
+    self.ground_vertices = self.buffer.alloc(Mesh.Vertex, Mesh.ground.vertices, 16);
+    self.ground_indices = self.buffer.alloc(u32, Mesh.ground.indices, 4);
 
     try self.pipeline.init(&self.device, .{
         .color_format = self.swapchain.format,
         .push_constant_size = @sizeOf(PushConstant),
+        .depth_format = .d32_sfloat,
     });
 }
 
@@ -142,18 +148,21 @@ pub fn deinit(self: *Renderer) void {
     self.dynlib.close();
 }
 
-// pub const DrawData = struct {
-//     elapsed
-// };
-pub fn draw(self: *Renderer, window: *Window) !void {
+pub const DrawData = struct {
+    window_size: Window.Size,
+    elapsed_time: f32,
+    view_matrix: nz.Mat4x4(f32),
+};
+pub fn draw(self: *Renderer, draw_data: DrawData) !void {
+    const window_size = draw_data.window_size;
     const vkd = self.device.proxy;
 
-    if (self.swapchain_dirty or window.size.width != self.swapchain.extent.width or
-        window.size.height != self.swapchain.extent.height)
+    if (self.swapchain_dirty or window_size.width != self.swapchain.extent.width or
+        window_size.height != self.swapchain.extent.height)
     {
         try self.swapchain.recreate(&self.instance, &self.device, self.surface, .{
-            .width = window.size.width,
-            .height = window.size.height,
+            .width = window_size.width,
+            .height = window_size.height,
         });
         self.swapchain_dirty = false;
     }
@@ -181,7 +190,7 @@ pub fn draw(self: *Renderer, window: *Window) !void {
     try vkd.resetFences(@ptrCast(&frame.in_flight));
     try vkd.resetCommandBuffer(frame.command_buffer, .{});
 
-    try self.record(frame.command_buffer, image_index);
+    try self.record(frame.command_buffer, image_index, draw_data);
 
     const wait_stage: [1]vk.PipelineStageFlags = .{.{ .color_attachment_output_bit = true }};
     try vkd.queueSubmit(self.device.graphics_queue, &.{.{
@@ -209,7 +218,7 @@ pub fn draw(self: *Renderer, window: *Window) !void {
     self.frame_data_index = (self.frame_data_index + 1) % frame_data_count;
 }
 
-fn record(self: *Renderer, cmd: vk.CommandBuffer, image_index: u32) !void {
+fn record(self: *Renderer, cmd: vk.CommandBuffer, image_index: u32, draw_data: DrawData) !void {
     const vkd = self.device.proxy;
 
     try vkd.beginCommandBuffer(cmd, &.{ .flags = .{ .one_time_submit_bit = true } });
@@ -226,6 +235,27 @@ fn record(self: *Renderer, cmd: vk.CommandBuffer, image_index: u32) !void {
         .{ .color_attachment_output_bit = true },
         .{ .color_attachment_write_bit = true },
     );
+    var depth_barrier: Barrier = .{
+        .vkd = vkd,
+        .cmd = cmd,
+        .image = self.swapchain.depth.handle,
+        .aspect_mask = .{ .depth_bit = true },
+    };
+    depth_barrier.transition(
+        .depth_attachment_optimal,
+        .{ .early_fragment_tests_bit = true },
+        .{ .depth_stencil_attachment_write_bit = true },
+    );
+
+    const depth: vk.RenderingAttachmentInfo = .{
+        .image_view = self.swapchain.depth.view,
+        .image_layout = .depth_attachment_optimal,
+        .resolve_mode = .{},
+        .resolve_image_layout = .undefined,
+        .load_op = .clear,
+        .store_op = .dont_care,
+        .clear_value = .{ .depth_stencil = .{ .depth = 1, .stencil = 0 } },
+    };
 
     const color: vk.RenderingAttachmentInfo = .{
         .image_view = self.swapchain.views[image_index],
@@ -242,6 +272,7 @@ fn record(self: *Renderer, cmd: vk.CommandBuffer, image_index: u32) !void {
         .view_mask = 0,
         .color_attachment_count = 1,
         .p_color_attachments = @ptrCast(&color),
+        .p_depth_attachment = &depth,
     });
 
     vkd.cmdBindPipeline(cmd, .graphics, self.pipeline.handle);
@@ -258,13 +289,13 @@ fn record(self: *Renderer, cmd: vk.CommandBuffer, image_index: u32) !void {
         .extent = self.swapchain.extent,
     }});
 
-    const view: nz.Mat4x4(f32) = .lookAt(.{ 0, 0, 4 }, .{ 0, 0, 0 }, .{ 0, 1, 0 });
     const aspect = self.swapchain.getAspect();
-    const projection: nz.Mat4x4(f32) =
+    var projection: nz.Mat4x4(f32) =
         .perspective(std.math.degreesToRadians(60.0), aspect, 0.1, 100);
+    projection.d[5] = -projection.d[5];
 
     const push: PushConstant = .{
-        .mvp = projection.mul(view).d,
+        .mvp = projection.mul(draw_data.view_matrix).d,
         .vertices = self.sphere_vertices.address,
     };
     vkd.cmdPushConstants(
@@ -284,6 +315,21 @@ fn record(self: *Renderer, cmd: vk.CommandBuffer, image_index: u32) !void {
         0,
         0,
     );
+
+    const ground_push: PushConstant = .{
+        .mvp = projection.mul(draw_data.view_matrix).d,
+        .vertices = self.ground_vertices.address,
+    };
+    vkd.cmdPushConstants(
+        cmd,
+        self.pipeline.layout,
+        .{ .vertex_bit = true },
+        0,
+        @sizeOf(PushConstant),
+        &ground_push,
+    );
+    vkd.cmdBindIndexBuffer(cmd, self.buffer.handle, self.ground_indices.offset, .uint32);
+    vkd.cmdDrawIndexed(cmd, Mesh.ground.indices.len, 1, 0, 0, 0);
 
     vkd.cmdEndRendering(cmd);
 

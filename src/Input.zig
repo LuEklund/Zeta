@@ -1,10 +1,12 @@
 const Input = @This();
 
+const nz = @import("numz");
 const Window = @import("Window.zig");
 
+pub const world_up: nz.Vec3(f32) = .{ 0, 1, 0 };
+
 keys: Keys = .{},
-yaw: f32 = 0,
-pitch: f32 = 0,
+look: [2]f32 = .{ 0, 0 },
 
 pub const Keys = packed struct(u8) {
     forward: bool = false,
@@ -16,12 +18,12 @@ pub const Keys = packed struct(u8) {
     _pad: u2 = 0,
 };
 
-pub fn sample(window: *const Window, previous: Input) Input {
-    const look = switch (window.pointer.movement) {
-        .relative => |r| r,
-        .position => .{ .dx = 0, .dy = 0 },
-    };
-    const sensitivity = 0.002;
+pub fn forward(self: Input) nz.Vec3(f32) {
+    const cos_pitch = @cos(self.pitch);
+    return .{ -cos_pitch * @sin(self.yaw), @sin(self.pitch), -cos_pitch * @cos(self.yaw) };
+}
+
+pub fn sample(window: *const Window) Input {
     return .{
         .keys = .{
             .forward = window.keyboard.isDown(.w),
@@ -31,8 +33,9 @@ pub fn sample(window: *const Window, previous: Input) Input {
             .up = window.keyboard.isDown(.space),
             .down = window.keyboard.isDown(.left_shift),
         },
-        .yaw = previous.yaw - @as(f32, @floatCast(look.dx)) *
-            sensitivity,
-        .pitch = @min(1.4, @max(-1.4, previous.pitch - @as(f32, @floatCast(look.dy)) * sensitivity)),
+        .look = switch (window.pointer.movement) {
+            .relative => |r| .{ @floatCast(r.dx), @floatCast(r.dy) },
+            .position => .{ 0, 0 },
+        },
     };
 }

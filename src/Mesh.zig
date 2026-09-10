@@ -52,3 +52,15 @@ fn makeSphere(comptime rings: u32, comptime sectors: u32) Sphere(rings, sectors)
     }
     return .{ .indices = new_sphere.indices, .vertices = new_sphere.vertices };
 }
+
+pub const ground: Mesh = .{ .vertices = &ground_vertices, .indices = &ground_indices };
+
+const ground_extent = 20.0;
+const ground_y = -1.5;
+const ground_vertices: [4]Vertex = .{
+    .{ .pos = .{ -ground_extent, ground_y, -ground_extent, 1 }, .color = .{ 0.30, 0.32, 0.35, 1 } },
+    .{ .pos = .{ ground_extent, ground_y, -ground_extent, 1 }, .color = .{ 0.30, 0.32, 0.35, 1 } },
+    .{ .pos = .{ ground_extent, ground_y, ground_extent, 1 }, .color = .{ 0.38, 0.40, 0.43, 1 } },
+    .{ .pos = .{ -ground_extent, ground_y, ground_extent, 1 }, .color = .{ 0.38, 0.40, 0.43, 1 } },
+};
+const ground_indices: [6]u32 = .{ 0, 1, 2, 2, 3, 0 };

@@ -68,6 +68,18 @@ pub fn init(self: *Pipeline, device: *const Device, config: Config) !void {
         .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
     };
 
+    const depth_enable: vk.Bool32 = if (config.depth_format !=
+        .undefined) .true else .false;
+    const stencil_off: vk.StencilOpState = .{
+        .fail_op = .keep,
+        .pass_op = .keep,
+        .depth_fail_op = .keep,
+        .compare_op = .never,
+        .compare_mask = 0,
+        .write_mask = 0,
+        .reference = 0,
+    };
+
     _ = try vkd.createGraphicsPipelines(.null_handle, &.{.{
         .p_next = &rendering,
         .stage_count = stages.len,
@@ -96,6 +108,17 @@ pub fn init(self: *Pipeline, device: *const Device, config: Config) !void {
             .min_sample_shading = 0,
             .alpha_to_coverage_enable = .false,
             .alpha_to_one_enable = .false,
+        },
+        .p_depth_stencil_state = &.{
+            .depth_test_enable = depth_enable,
+            .depth_write_enable = depth_enable,
+            .depth_compare_op = .less,
+            .depth_bounds_test_enable = .false,
+            .stencil_test_enable = .false,
+            .front = stencil_off,
+            .back = stencil_off,
+            .min_depth_bounds = 0,
+            .max_depth_bounds = 1,
         },
         .p_color_blend_state = &.{
             .logic_op_enable = .false,

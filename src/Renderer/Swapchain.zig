@@ -5,6 +5,7 @@ const nz = @import("numz");
 const vk = @import("vulkan");
 const Instance = @import("Instance.zig");
 const Device = @import("Device.zig");
+const Image = @import("Image.zig");
 
 const max_images = 4;
 const max_surface_formats = 64;
@@ -13,6 +14,9 @@ const max_present_modes = 8;
 handle: vk.SwapchainKHR,
 format: vk.Format,
 extent: vk.Extent2D,
+
+depth: Image,
+
 images: [max_images]vk.Image,
 views: [max_images]vk.ImageView,
 render_finished: [max_images]vk.Semaphore,
@@ -90,10 +94,19 @@ pub fn init(
             },
         }, null);
     }
+    try self.depth.init(
+        device,
+        .d32_sfloat,
+        extent,
+        .{ .depth_stencil_attachment_bit = true },
+        .{ .depth_bit = true },
+    );
 }
 
 pub fn deinit(self: *Swapchain, device: *const Device) void {
     const vkd = device.proxy;
+
+    self.depth.deinit(device);
     for (
         self.views[0..self.image_count],
         self.render_finished[0..self.image_count],

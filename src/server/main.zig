@@ -17,6 +17,8 @@ pub fn main(init: std.process.Init) !void {
         .size = .{ .width = 1280, .height = 720 },
     });
     try window.setPointerRelative(true);
+    try window.setPointerConstraint(.locked);
+    try window.setPointerVisible(false);
     defer window.close();
 
     var hot_lib: HotLib(System.ffi) = undefined;
