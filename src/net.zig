@@ -36,7 +36,7 @@ pub const protocol_version: u32 = version: {
 
 pub fn encode(packet: anytype, buffer: *[max_packet_len]u8) []u8 {
     var writer: std.Io.Writer = .fixed(buffer);
-    writer.writeInt(u32, protocol_version, endian);
+    writer.writeInt(u32, protocol_version, endian) catch unreachable;
     marshal(packet, &writer) catch unreachable;
     return writer.buffered();
 }
@@ -55,16 +55,20 @@ pub fn marshal(value: anytype, writer: *Writer) Writer.Error!void {
         .int => try writer.writeInt(T, value, endian),
         .float => |float| try writer.writeInt(@Int(.unsigned, float.bits), @bitCast(value), endian),
         .@"enum" => |e| try writer.writeInt(e.tag_type, @intFromEnum(value), endian),
+        .vector => |vector| try marshal(@as([vector.len]vector.child, value), writer),
         .array => for (value) |element| try marshal(element, writer),
         .@"struct" => |s| switch (s.layout) {
             .auto, .@"extern" => inline for (s.fields) |field| try marshal(@field(value, field.name), writer),
             .@"packed" => try writer.writeStruct(value, endian),
         },
-        .@"union" => switch (value) {
-            inline else => |payload, tag| {
-                try writer.writeInt(u8, @intFromEnum(tag), endian);
-                try marshal(payload, writer);
-            },
+        .@"union" => |u| {
+            _ = u.tag_type orelse @compileError("use a tagged union: " ++ @typeName(T));
+            switch (value) {
+                inline else => |payload, tag| {
+                    try writer.writeInt(u8, @intFromEnum(tag), endian);
+                    try marshal(payload, writer);
+                },
+            }
         },
         else => @compileError("NO wire format for " ++ @typeName(T)),
     }
@@ -75,7 +79,35 @@ fn unmarshal(comptime T: type, reader: *Reader) !T {
         .void => {},
         .bool => try reader.takeInt(u8, endian) != 0,
         .int => try reader.takeInt(T, endian),
-        // .float => |float| @bitCast(try reader.takeInt(@Int(.unsigned, float.bits), endian)),
+        .float => |float| @bitCast(try reader.takeInt(@Int(.unsigned, float.bits), endian)),
+        .@"enum" => |e| std.enums.fromInt(T, try reader.takeInt(e.tag_type, endian)) orelse error.BadTag,
+        .vector => |v| try unmarshal([v.len]v.child, reader),
+        .array => |array| arr: {
+            var result: T = undefined;
+            for (&result) |*element| element.* = try unmarshal(array.child, reader);
+            break :arr result;
+        },
+        .@"struct" => |s| switch (s.layout) {
+            .auto, .@"extern" => fields: {
+                var result: T = undefined;
+                inline for (s.fields) |field| @field(result, field.name) = try unmarshal(field.type, reader);
+                break :fields result;
+            },
+            .@"packed" => try reader.takeStruct(T, endian),
+        },
+        .@"union" => |u| union_: {
+            const Tag = u.tag_type orelse @compileError("use a tagged union: " ++
+                @typeName(T));
+            const tag = std.enums.fromInt(Tag, try reader.takeInt(u8, endian)) orelse return error.BadTag;
+            switch (tag) {
+                inline else => |t| break :union_ @unionInit(
+                    T,
+                    @tagName(t),
+                    try unmarshal(@FieldType(T, @tagName(t)), reader),
+                ),
+            }
+        },
+        else => @compileError("NO wire format for " ++ @typeName(T)),
     };
 }
 
