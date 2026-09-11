@@ -31,6 +31,7 @@ fn init(self: *System, data: InitInfo) !void {
 }
 
 fn update(self: *System, window: *Window) !void {
+    // window.should_close = true;
     const now: std.Io.Timestamp = .now(self.io, .awake);
     const elapsed = @as(f32, @floatFromInt(self.start.durationTo(now).nanoseconds)) / std.time.ns_per_s;
     const dt = @as(f32, @floatFromInt(self.last.durationTo(now).nanoseconds)) /

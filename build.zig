@@ -8,6 +8,7 @@ pub fn build(b: *std.Build) void {
     const box3d_dep = b.dependency("box3d", .{});
     const box3d_lib = b.addLibrary(.{
         .name = "box3d",
+        .linkage = .dynamic,
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
@@ -15,6 +16,7 @@ pub fn build(b: *std.Build) void {
             .sanitize_c = .off,
         }),
     });
+    b.installArtifact(box3d_lib);
     box3d_lib.root_module.addIncludePath(box3d_dep.path("include"));
     box3d_lib.root_module.addIncludePath(box3d_dep.path("src"));
     box3d_lib.root_module.addCSourceFiles(.{

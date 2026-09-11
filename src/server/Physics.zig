@@ -2,8 +2,8 @@ const Physics = @This();
 
 const std = @import("std");
 const zeta = @import("zeta");
-const nz = zeta.numz;
 const b3 = @import("box3d");
+const nz = zeta.numz;
 
 pub const tick_hz = 60;
 pub const tick_dt: f32 = 1.0 / @as(f32, tick_hz);
